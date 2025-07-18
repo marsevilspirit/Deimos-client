@@ -15,7 +15,7 @@ func main() {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	key := "/phobos"
+	key := "/key"
 	value := "localhost:8080"
 
 	// 1. 设置一个值

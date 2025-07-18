@@ -23,7 +23,8 @@ type SetDeleteOption interface {
 	DeleteOption
 }
 
-type DeleteWatchOption interface {
+type GetDeleteWatchOption interface {
+	GetOption
 	DeleteOption
 	WatchOption
 }
@@ -78,6 +79,10 @@ func WithRecursive() DeleteOption {
 
 type recursiveOption struct {
 	recursive bool
+}
+
+func (o *recursiveOption) applyToGet(opts *GetOptions) {
+	opts.recursive = o.recursive
 }
 
 func (o *recursiveOption) applyToDelete(opts *DeleteOptions) {
