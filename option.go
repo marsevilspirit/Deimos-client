@@ -73,7 +73,7 @@ func (o *prevExistOption) applyToSet(opts *SetOptions) {
 }
 
 // recursive option
-func WithRecursive() DeleteOption {
+func WithRecursive() GetDeleteWatchOption {
 	return &recursiveOption{recursive: true}
 }
 
