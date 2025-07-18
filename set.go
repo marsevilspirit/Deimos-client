@@ -10,40 +10,45 @@ import (
 )
 
 type SetOptions struct {
-	TTL time.Duration
+	ttl       time.Duration
+	dir       bool
+	prevExist bool
 }
 
-type SetOption func(*SetOptions)
+func newSetOptions(options []SetOption) *SetOptions {
+	setOpts := SetOptions{}
 
-func WithTTL(ttl time.Duration) SetOption {
-	return func(opts *SetOptions) {
-		opts.TTL = ttl
+	for _, opt := range options {
+		opt.applyToSet(&setOpts)
 	}
+
+	return &setOpts
 }
 
 func (c *Client) Set(ctx context.Context, key, value string, opts ...SetOption) (*Response, error) {
-	options := &SetOptions{}
+	setOpts := newSetOptions(opts)
 
-	for _, opt := range opts {
-		opt(options)
+	URL := c.buildURL(key)
+	query := url.Values{}
+
+	if setOpts.dir {
+		query.Set("dir", "true")
+	} else {
+		query.Set("value", value)
 	}
 
-	fullURL := c.buildURL(key)
-
-	formData := url.Values{}
-	formData.Set("value", value)
-
-	// handle ttl option
-	if options.TTL > 0 {
-		ttlInSeconds := int64(options.TTL.Seconds())
-		formData.Set("ttl", fmt.Sprintf("%d", ttlInSeconds))
+	if setOpts.ttl > 0 {
+		query.Set("ttl", fmt.Sprintf("%d", int64(setOpts.ttl.Seconds())))
 	}
 
-	body := strings.NewReader(formData.Encode())
+	if setOpts.prevExist {
+		query.Set("prevExist", "true")
+	}
 
-	req, err := http.NewRequestWithContext(ctx, "PUT", fullURL, body)
+	body := strings.NewReader(query.Encode())
+	req, err := http.NewRequestWithContext(ctx, "PUT", URL, body)
 	if err != nil {
-		return nil, fmt.Errorf("create deimos request failed: %w", err)
+		return nil, fmt.Errorf("failed to create request: %w", err)
 	}
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 

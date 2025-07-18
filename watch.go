@@ -11,25 +11,18 @@ import (
 
 // WatchOptions contains all optional parameters for a Watch operation.
 type WatchOptions struct {
-	Recursive bool   // Whether to recursively watch a directory.
-	WaitIndex uint64 // The index to start waiting from.
+	recursive bool   // Whether to recursively watch a directory.
+	waitIndex uint64 // The index to start waiting from.
 }
 
-// WatchOption is a function type for modifying WatchOptions.
-type WatchOption func(*WatchOptions)
+func newWatchOptions(options []WatchOption) *WatchOptions {
+	watchOpts := WatchOptions{}
 
-// WithRecursive is an option function to enable recursive watching.
-func WithRecursive() WatchOption {
-	return func(opts *WatchOptions) {
-		opts.Recursive = true
+	for _, opt := range options {
+		opt.applyToWatch(&watchOpts)
 	}
-}
 
-// WithWaitIndex is an option function to specify the starting watch index.
-func WithWaitIndex(index uint64) WatchOption {
-	return func(opts *WatchOptions) {
-		opts.WaitIndex = index
-	}
+	return &watchOpts
 }
 
 // Watch monitors a key for changes.
@@ -38,10 +31,7 @@ func WithWaitIndex(index uint64) WatchOption {
 func (c *Client) Watch(ctx context.Context, key string, opts ...WatchOption) <-chan *Response {
 	respChan := make(chan *Response, 1)
 
-	watchOpts := &WatchOptions{}
-	for _, opt := range opts {
-		opt(watchOpts)
-	}
+	watchOpts := newWatchOptions(opts)
 
 	go c.watcher(ctx, key, watchOpts, respChan)
 
@@ -57,21 +47,21 @@ func (c *Client) watcher(ctx context.Context, key string, opts *WatchOptions, re
 		query := url.Values{}
 		query.Set("wait", "true")
 
-		if opts.Recursive {
+		if opts.recursive {
 			query.Set("recursive", "true")
 		}
 		// If waitIndex is greater than 0, add it to the query.
 		// This is the core of the loop: after each event, we use the new index + 1 to make the next request.
-		if opts.WaitIndex > 0 {
-			query.Set("waitIndex", fmt.Sprintf("%d", opts.WaitIndex))
+		if opts.waitIndex > 0 {
+			query.Set("waitIndex", fmt.Sprintf("%d", opts.waitIndex))
 		}
 
-		fullURL := c.buildURL(key) + "?" + query.Encode()
+		URL := c.buildURL(key) + "?" + query.Encode()
 
 		// Create the request and pass the parent context into it.
 		// If the parent context is canceled, the request here will fail immediately,
 		// allowing for a graceful exit from the loop.
-		req, err := http.NewRequestWithContext(ctx, "GET", fullURL, nil)
+		req, err := http.NewRequestWithContext(ctx, "GET", URL, nil)
 		if err != nil {
 			// This should not normally happen, but if it does, we cannot continue.
 			// We could send an error to an error channel here, but for simplicity, we just return.
@@ -114,7 +104,7 @@ func (c *Client) watcher(ctx context.Context, key string, opts *WatchOptions, re
 
 		// Update waitIndex so the next request can get the next event.
 		// This is the key to achieving continuous watching!
-		opts.WaitIndex = deimosResp.Node.ModifiedIndex + 1
+		opts.waitIndex = deimosResp.Node.ModifiedIndex + 1
 
 		// Send the response to the channel.
 		// At the same time, check if the context has been canceled in case the caller

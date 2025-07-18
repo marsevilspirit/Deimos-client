@@ -6,9 +6,12 @@ import (
 	"net/http"
 )
 
+// TODO: add get options
+type GetOptions struct{}
+
 func (c *Client) Get(ctx context.Context, key string) (*Response, error) {
-	fullURL := c.buildURL(key)
-	req, err := http.NewRequestWithContext(ctx, "GET", fullURL, nil)
+	URL := c.buildURL(key)
+	req, err := http.NewRequestWithContext(ctx, "GET", URL, nil)
 	if err != nil {
 		return nil, fmt.Errorf("create deimos request failed: %w", err)
 	}
