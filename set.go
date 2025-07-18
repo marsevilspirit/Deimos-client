@@ -9,6 +9,18 @@ import (
 	"time"
 )
 
+type SetOptions struct {
+	TTL time.Duration
+}
+
+type SetOption func(*SetOptions)
+
+func WithTTL(ttl time.Duration) SetOption {
+	return func(opts *SetOptions) {
+		opts.TTL = ttl
+	}
+}
+
 func (c *Client) Set(ctx context.Context, key, value string, opts ...SetOption) (*Response, error) {
 	options := &SetOptions{}
 
@@ -36,16 +48,4 @@ func (c *Client) Set(ctx context.Context, key, value string, opts ...SetOption) 
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 
 	return c.doRequest(req)
-}
-
-type SetOptions struct {
-	TTL time.Duration
-}
-
-type SetOption func(*SetOptions)
-
-func WithTTL(ttl time.Duration) SetOption {
-	return func(opts *SetOptions) {
-		opts.TTL = ttl
-	}
 }
