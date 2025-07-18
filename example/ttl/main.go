@@ -9,7 +9,7 @@ import (
 )
 
 func main() {
-	// 确保你的 etcd 服务器正在运行
+	// 确保你的 deimos 服务器正在运行
 	endpoints := []string{"http://127.0.0.1:4001", "http://127.0.0.1:4002", "http://127.0.0.1:4003"}
 	client := deimos.NewClient(endpoints)
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
