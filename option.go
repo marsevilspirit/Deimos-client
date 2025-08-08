@@ -18,9 +18,18 @@ type WatchOption interface {
 	applyToWatch(*WatchOptions)
 }
 
+type LockOption interface {
+	applyToLock(*LockOptions)
+}
+
 type SetDeleteOption interface {
 	SetOption
 	DeleteOption
+}
+
+type SetLockOption interface {
+	SetOption
+	LockOption
 }
 
 type GetDeleteWatchOption interface {
@@ -30,7 +39,7 @@ type GetDeleteWatchOption interface {
 }
 
 // TTL option
-func WithTTL(ttl time.Duration) SetOption {
+func WithTTL(ttl time.Duration) SetLockOption {
 	return &ttlOption{ttl: ttl}
 }
 
@@ -39,6 +48,10 @@ type ttlOption struct {
 }
 
 func (o *ttlOption) applyToSet(opts *SetOptions) {
+	opts.ttl = o.ttl
+}
+
+func (o *ttlOption) applyToLock(opts *LockOptions) {
 	opts.ttl = o.ttl
 }
 
@@ -60,8 +73,8 @@ func (o *dirOption) applyToDelete(opts *DeleteOptions) {
 }
 
 // prevExist option
-func WithPrevExist() SetOption {
-	return &prevExistOption{prevExist: true}
+func WithPrevExist(exists bool) SetOption {
+	return &prevExistOption{prevExist: exists}
 }
 
 type prevExistOption struct {
@@ -69,7 +82,7 @@ type prevExistOption struct {
 }
 
 func (o *prevExistOption) applyToSet(opts *SetOptions) {
-	opts.prevExist = o.prevExist
+	opts.prevExist = &o.prevExist
 }
 
 // recursive option
@@ -104,4 +117,30 @@ type waitIndexOption struct {
 
 func (o *waitIndexOption) applyToWatch(opts *WatchOptions) {
 	opts.waitIndex = o.waitIndex
+}
+
+// WithRenewalPeriod sets the renewal period for auto-renewal
+func WithRenewalPeriod(period time.Duration) LockOption {
+	return &renewalPeriodOption{period: period}
+}
+
+type renewalPeriodOption struct {
+	period time.Duration
+}
+
+func (o *renewalPeriodOption) applyToLock(opts *LockOptions) {
+	opts.RenewalPeriod = o.period
+}
+
+// WithAutoRenewal enables or disables auto-renewal
+func WithAutoRenewal(enabled bool) LockOption {
+	return &autoRenewalOption{enabled: enabled}
+}
+
+type autoRenewalOption struct {
+	enabled bool
+}
+
+func (o *autoRenewalOption) applyToLock(opts *LockOptions) {
+	opts.AutoRenewal = o.enabled
 }

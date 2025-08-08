@@ -25,6 +25,10 @@ func (c *Client) doRequest(req *http.Request) (*Response, error) {
 
 	var deimosResp Response
 	if err := json.Unmarshal(respBody, &deimosResp); err != nil {
+		// For 4xx errors, the response might be in a different format
+		if resp.StatusCode >= 400 && resp.StatusCode < 500 {
+			return nil, fmt.Errorf("deimos client error (HTTP %d): %s", resp.StatusCode, string(respBody))
+		}
 		return nil, fmt.Errorf("umarshal json error: %w", err)
 	}
 

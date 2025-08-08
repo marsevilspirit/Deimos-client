@@ -12,7 +12,7 @@ import (
 type SetOptions struct {
 	ttl       time.Duration
 	dir       bool
-	prevExist bool
+	prevExist *bool
 }
 
 func newSetOptions(options []SetOption) *SetOptions {
@@ -41,8 +41,12 @@ func (c *Client) Set(ctx context.Context, key, value string, opts ...SetOption) 
 		query.Set("ttl", fmt.Sprintf("%d", int64(setOpts.ttl.Seconds())))
 	}
 
-	if setOpts.prevExist {
-		query.Set("prevExist", "true")
+	if setOpts.prevExist != nil {
+		if *setOpts.prevExist {
+			query.Set("prevExists", "true")
+		} else {
+			query.Set("prevExists", "false")
+		}
 	}
 
 	body := strings.NewReader(query.Encode())
