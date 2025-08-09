@@ -1,6 +1,47 @@
-# Deimos 分布式锁示例
+# Deimos Client 示例
 
-本目录包含了使用 Deimos 分布式锁的各种示例。
+本目录包含了使用 Deimos Client 的各种示例，包括基本操作、分布式锁、监听等功能。
+
+## 模块结构
+
+本示例目录使用独立的 Go 模块管理，与主项目分离：
+
+```
+example/
+├── go.mod              # 独立的模块文件
+├── go.sum              # 依赖锁定文件
+├── README.md           # 本文件
+├── basic/              # 基本操作示例
+├── lock_basic/         # 基础锁示例
+├── distributed_lock/   # 完整分布式锁示例
+├── lock_advanced/      # 高级锁用法
+├── watch/              # 监听示例
+├── ttl/                # TTL 示例
+├── dir/                # 目录操作示例
+├── test/               # 测试示例
+└── multiple_watch_lock/ # 多重监听锁示例
+```
+
+## 运行示例
+
+### 方式一：使用 Makefile（推荐）
+
+```bash
+# 从项目根目录运行
+make examples
+```
+
+### 方式二：直接运行
+
+```bash
+# 进入 example 目录
+cd example
+
+# 运行特定示例
+go run basic/main.go
+go run lock_basic/main.go
+go run distributed_lock/main.go
+```
 
 ## 前置条件
 
