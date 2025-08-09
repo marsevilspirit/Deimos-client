@@ -32,11 +32,21 @@ fmt:
 
 lint:
 	@echo "Linting code..."
-	@$(GOLINT) run ./...
+	@if command -v golangci-lint >/dev/null 2>&1; then \
+		golangci-lint run ./...; \
+	else \
+		echo "golangci-lint not found, skipping lint check"; \
+		echo "To install: curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b \$$(go env GOPATH)/bin v1.55.2"; \
+	fi
 
 vet:
 	@echo "Running go vet..."
 	@$(GOCMD) vet ./...
+
+install-lint:
+	@echo "Installing golangci-lint..."
+	@curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $$(go env GOPATH)/bin v1.55.2
+	@echo "golangci-lint installed successfully!"
 
 check: fmt vet lint
 	@echo "All checks passed!"
