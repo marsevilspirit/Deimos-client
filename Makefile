@@ -36,7 +36,7 @@ lint:
 		golangci-lint run ./...; \
 	else \
 		echo "golangci-lint not found, skipping lint check"; \
-		echo "To install: curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b \$$(go env GOPATH)/bin v1.55.2"; \
+		echo "To install: make install-lint"; \
 	fi
 
 vet:
@@ -45,7 +45,7 @@ vet:
 
 install-lint:
 	@echo "Installing golangci-lint..."
-	@curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $$(go env GOPATH)/bin v1.55.2
+	@go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
 	@echo "golangci-lint installed successfully!"
 
 check: fmt vet lint
