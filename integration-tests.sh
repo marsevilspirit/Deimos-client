@@ -1,17 +1,29 @@
 #!/bin/bash
 set -e
 
+# Detect which docker compose command to use
+if command -v docker-compose >/dev/null 2>&1; then
+  DOCKER_COMPOSE="docker-compose"
+elif docker compose version >/dev/null 2>&1; then
+  DOCKER_COMPOSE="docker compose"
+else
+  echo "Error: Neither 'docker-compose' nor 'docker compose' is available"
+  exit 1
+fi
+
+echo "Using Docker Compose command: $DOCKER_COMPOSE"
+
 # Function to clean up resources
 cleanup() {
   echo "Stopping and removing Deimos cluster..."
-  docker-compose down
+  $DOCKER_COMPOSE down
 }
 
 # Trap EXIT signal to ensure cleanup is always performed
 trap cleanup EXIT
 
 echo "Starting Deimos cluster..."
-docker-compose up -d
+$DOCKER_COMPOSE up -d
 
 echo "Waiting for Deimos cluster to start..."
 for i in {1..30}; do
@@ -26,7 +38,7 @@ done
 
 if [ $i -eq 30 ]; then
   echo "Deimos cluster failed to start"
-  docker-compose logs
+  $DOCKER_COMPOSE logs
   exit 1
 fi
 
