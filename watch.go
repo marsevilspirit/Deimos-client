@@ -84,7 +84,7 @@ func (c *Client) watcher(ctx context.Context, key string, opts *WatchOptions, re
 		}
 
 		respBody, err := io.ReadAll(resp.Body)
-		resp.Body.Close()
+		_ = resp.Body.Close()
 		if err != nil {
 			fmt.Printf("watcher: failed to read response body: %v\n", err)
 			return

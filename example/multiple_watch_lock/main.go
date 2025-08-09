@@ -16,7 +16,7 @@ func main() {
 	lockKey := "/locks/multi-watch-test"
 
 	// 清理可能存在的锁
-	client.Delete(context.Background(), lockKey)
+	_, _ = client.Delete(context.Background(), lockKey)
 	time.Sleep(100 * time.Millisecond) // 等待删除完成
 
 	// 先创建初始锁持有者

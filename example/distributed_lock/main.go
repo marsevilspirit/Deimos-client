@@ -16,7 +16,8 @@ func main() {
 	endpoints := []string{"http://127.0.0.1:4001", "http://127.0.0.1:4002", "http://127.0.0.1:4003"}
 	client := deimos.NewClient(endpoints)
 
-	fmt.Println("=== Deimos 分布式锁示例 ===\n")
+	fmt.Println("=== Deimos 分布式锁示例 ===")
+	fmt.Println()
 
 	// 示例1: 基本锁使用
 	fmt.Println("1. 基本锁使用示例")

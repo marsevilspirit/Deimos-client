@@ -7,6 +7,22 @@ on:
     branches: [ main ]
 
 jobs:
+  check-code:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+
+    - name: Set up Go
+      uses: actions/setup-go@v4
+      with:
+        go-version: '1.24.5'
+
+    - name: Run Check Code
+      run: |
+        make check
+        git status && [[ -z `git status -s` ]]
+
   integration-test:
     runs-on: ubuntu-latest
     steps:
@@ -20,4 +36,4 @@ jobs:
 
     - name: Run integration tests
       run: |
-        sh integration-tests.sh
+        make integration-test

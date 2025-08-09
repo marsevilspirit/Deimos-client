@@ -1,3 +1,3 @@
 package deimosclient
 
-const version = "v1"
+const Version = "v1"

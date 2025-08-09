@@ -15,7 +15,7 @@ func main() {
 
 	dir := "/phobos"
 
-	client.Delete(ctx, dir, deimos.WithDir(), deimos.WithRecursive())
+	_, _ = client.Delete(ctx, dir, deimos.WithDir(), deimos.WithRecursive())
 	resp, err := client.Set(ctx, dir, "", deimos.WithDir())
 	if err != nil {
 		slog.Error("set dir", "err", err, "resp", resp)

@@ -19,7 +19,7 @@ func main() {
 	// 1. Create a directory with a 5-second TTL.
 	fmt.Printf("1. Creating directory '%s'...\n", dirKey)
 	// Make sure the key is clean before we start.
-	client.Delete(ctx, dirKey, deimos.WithDir(), deimos.WithRecursive())
+	_, _ = client.Delete(ctx, dirKey, deimos.WithDir(), deimos.WithRecursive())
 	createResp, err := client.Set(ctx, dirKey, "", deimos.WithDir())
 	if err != nil {
 		fmt.Printf("   Failed to create directory: %v\n", err)
