@@ -22,6 +22,30 @@ example/
 └── multiple_watch_lock/ # 多重监听锁示例
 ```
 
+## 断言验证功能
+
+本示例项目集成了 `testify/assert` 断言库，为关键检查点提供验证功能：
+
+- ✅ **操作结果验证**：验证 Set、Get、Delete 操作的返回值
+- ✅ **状态断言**：验证锁的持有状态、TTL 等
+- ✅ **错误处理**：验证预期的错误情况
+- ✅ **时间验证**：验证操作耗时在合理范围内
+- ✅ **数据类型检查**：验证返回数据的类型和内容
+
+### 断言示例
+
+```go
+// 验证设置操作成功
+assert.NoError(t, err, "设置键值应该成功")
+assert.Equal(t, "set", setResp.Action, "操作类型应该是 'set'")
+
+// 验证锁状态
+assert.True(t, lock.IsHeld(), "获取锁后应该处于持有状态")
+
+// 验证错误情况
+assert.Error(t, err, "获取不存在的键应该返回错误")
+```
+
 ## 运行示例
 
 ### 方式一：使用 Makefile（推荐）
@@ -38,8 +62,10 @@ make examples
 cd example
 
 # 运行特定示例
-go run basic/main.go
-go run lock_basic/main.go
+go run basic/main.go           # 基本操作（带断言）
+go run lock_basic/main.go      # 基础锁示例（带断言）
+go run ttl/main.go            # TTL 示例（带断言）
+go run assertions/main.go     # 专门的断言验证示例
 go run distributed_lock/main.go
 ```
 
