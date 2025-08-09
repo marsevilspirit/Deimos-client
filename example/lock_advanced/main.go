@@ -5,9 +5,8 @@ import (
 	"fmt"
 	"log"
 	"os"
-	"os/signal"
+	"strings"
 	"sync"
-	"syscall"
 	"time"
 
 	deimos "github.com/marsevilspirit/deimos-client"
@@ -21,190 +20,251 @@ func main() {
 	endpoints := []string{"http://127.0.0.1:4001", "http://127.0.0.1:4002", "http://127.0.0.1:4003"}
 	client := deimos.NewClient(endpoints)
 
-	// 创建可取消的上下文
-	ctx, cancel := context.WithCancel(context.Background())
+	// 创建有超时的上下文 - 集成测试模式，60秒后自动退出
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
 
-	// 处理优雅关闭
-	sigCh := make(chan os.Signal, 1)
-	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
-
-	fmt.Println("=== Deimos 分布式锁高级示例 ===")
-	fmt.Println("按 Ctrl+C 优雅退出")
+	fmt.Println("=== Deimos 分布式锁高级集成测试 ===")
+	fmt.Println("测试将在60秒后自动结束")
 	fmt.Println()
 
+	// 用于收集测试结果
+	results := make(chan TestResult, 3)
+	var wg sync.WaitGroup
+
 	// 示例1: 锁监控和健康检查
-	go lockMonitoringExample(ctx, client)
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		result := lockMonitoringExample(ctx, client)
+		results <- result
+	}()
 
 	// 示例2: 锁超时和重试策略
-	go lockTimeoutExample(ctx, client)
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		result := lockTimeoutExample(ctx, client)
+		results <- result
+	}()
 
 	// 示例3: 多个锁的协调
-	go multipleLockExample(ctx, client)
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		result := multipleLockExample(ctx, client)
+		results <- result
+	}()
 
-	// 等待信号
-	<-sigCh
-	fmt.Println("\n收到退出信号，正在优雅关闭...")
-	cancel()
+	// 等待所有测试完成
+	go func() {
+		wg.Wait()
+		close(results)
+	}()
 
-	// 等待一段时间让所有goroutine清理
-	time.Sleep(2 * time.Second)
-	fmt.Println("程序已退出")
+	// 收集结果
+	testResults := make([]TestResult, 0, 3)
+	for result := range results {
+		testResults = append(testResults, result)
+	}
+
+	// 输出测试总结
+	fmt.Println("\n=== 测试结果总结 ===")
+	allPassed := true
+	for _, result := range testResults {
+		status := "✓ PASS"
+		if !result.Success {
+			status = "✗ FAIL"
+			allPassed = false
+		}
+		fmt.Printf("%s: %s - %s\n", status, result.TestName, result.Message)
+	}
+
+	fmt.Printf("\n总体结果: ")
+	if allPassed {
+		fmt.Println("✓ 所有测试通过")
+		os.Exit(0)
+	} else {
+		fmt.Println("✗ 部分测试失败")
+		os.Exit(1)
+	}
+}
+
+type TestResult struct {
+	TestName string
+	Success  bool
+	Message  string
 }
 
 // 锁监控和健康检查示例
-func lockMonitoringExample(ctx context.Context, client *deimos.Client) {
+func lockMonitoringExample(ctx context.Context, client *deimos.Client) TestResult {
+	testName := "锁监控和健康检查"
 	lockKey := "/locks/monitoring-example"
 	nodeID := "monitor-node"
+
+	fmt.Printf("[监控] 开始测试: %s\n", testName)
 
 	lock := client.NewDistributedLock(lockKey, nodeID,
 		deimos.WithTTL(10*time.Second),
 		deimos.WithRenewalPeriod(3*time.Second),
 		deimos.WithAutoRenewal(true))
 
-	for {
+	// 尝试获取锁
+	fmt.Printf("[监控] 尝试获取锁: %s\n", lockKey)
+	if err := lock.Lock(ctx); err != nil {
+		return TestResult{
+			TestName: testName,
+			Success:  false,
+			Message:  fmt.Sprintf("获取锁失败: %v", err),
+		}
+	}
+
+	fmt.Printf("[监控] ✓ 获取锁成功\n")
+
+	// 启动自动续约
+	lock.StartAutoRenewal(ctx, 3*time.Second)
+
+	// 监控锁状态并执行工作
+	workSteps := 10
+	successSteps := 0
+
+	for i := 0; i < workSteps; i++ {
 		select {
 		case <-ctx.Done():
-			return
+			goto monitorWorkDone
 		default:
 		}
 
-		fmt.Printf("[监控] 尝试获取锁: %s\n", lockKey)
+		fmt.Printf("[监控] 执行工作步骤 %d/%d\n", i+1, workSteps)
+		time.Sleep(1 * time.Second)
 
-		if err := lock.Lock(ctx); err != nil {
-			log.Printf("[监控] 获取锁失败: %v", err)
-			time.Sleep(2 * time.Second)
-			continue
+		// 检查锁状态
+		if !lock.IsHeld() {
+			fmt.Printf("[监控] ⚠️  锁已丢失！\n")
+			break
 		}
 
-		fmt.Printf("[监控] ✓ 获取锁成功\n")
-
-		// 启动自动续约
-		lock.StartAutoRenewal(ctx, 3*time.Second)
-
-		// 监控锁状态
-		monitorTicker := time.NewTicker(1 * time.Second)
-		workDone := make(chan struct{})
-
-		// 模拟工作
-		go func() {
-			defer close(workDone)
-			for i := 0; i < 15; i++ {
-				select {
-				case <-ctx.Done():
-					return
-				default:
-				}
-
-				fmt.Printf("[监控] 执行工作步骤 %d/15\n", i+1)
-				time.Sleep(1 * time.Second)
-
-				// 检查锁状态
-				if !lock.IsHeld() {
-					fmt.Printf("[监控] ⚠️  锁已丢失！\n")
-					return
-				}
-			}
-		}()
-
-		// 监控循环
-	monitorLoop:
-		for {
-			select {
-			case <-ctx.Done():
-				break monitorLoop
-			case <-workDone:
-				fmt.Printf("[监控] 工作完成\n")
-				break monitorLoop
-			case <-monitorTicker.C:
-				info := lock.Info()
-				if info.Held {
-					fmt.Printf("[监控] 锁状态: 正常 (Index: %d)\n", info.LastIndex)
-				} else {
-					fmt.Printf("[监控] ⚠️  锁状态: 已丢失\n")
-					break monitorLoop
-				}
-			}
-		}
-
-		monitorTicker.Stop()
-
-		// 释放锁
-		if err := lock.Unlock(ctx); err != nil {
-			log.Printf("[监控] 释放锁失败: %v", err)
+		info := lock.Info()
+		if info.Held {
+			fmt.Printf("[监控] 锁状态: 正常 (Index: %d)\n", info.LastIndex)
+			successSteps++
 		} else {
-			fmt.Printf("[监控] ✓ 锁已释放\n")
+			fmt.Printf("[监控] ⚠️  锁状态: 已丢失\n")
+			break
 		}
+	}
 
-		// 等待一段时间再重新开始
-		time.Sleep(5 * time.Second)
+monitorWorkDone:
+	// 释放锁 - 如果锁已经过期，忽略 "Key not found" 错误
+	if err := lock.Unlock(ctx); err != nil {
+		if !isKeyNotFoundError(err) {
+			return TestResult{
+				TestName: testName,
+				Success:  false,
+				Message:  fmt.Sprintf("释放锁失败: %v", err),
+			}
+		} else {
+			fmt.Printf("[监控] 锁已自动过期，无需手动释放\n")
+		}
+	}
+
+	fmt.Printf("[监控] ✓ 锁已释放\n")
+
+	success := successSteps >= workSteps/2 // 至少完成一半工作才算成功
+	message := fmt.Sprintf("完成 %d/%d 工作步骤", successSteps, workSteps)
+
+	return TestResult{
+		TestName: testName,
+		Success:  success,
+		Message:  message,
 	}
 }
 
 // 锁超时和重试策略示例
-func lockTimeoutExample(ctx context.Context, client *deimos.Client) {
+func lockTimeoutExample(ctx context.Context, client *deimos.Client) TestResult {
+	testName := "锁超时和重试策略"
 	time.Sleep(2 * time.Second) // 错开启动时间
+
+	fmt.Printf("[超时] 开始测试: %s\n", testName)
 
 	lockKey := "/locks/timeout-example"
 	nodeID := "timeout-node"
 
-	for {
+	lock := client.NewDistributedLock(lockKey, nodeID,
+		deimos.WithTTL(5*time.Second),
+		deimos.WithAutoRenewal(false))
+
+	fmt.Printf("[超时] 尝试获取锁（使用 watchAndLock 机制）\n")
+
+	// Lock 方法内部已经使用了 watchAndLock，无需手动重试
+	err := lock.Lock(ctx)
+	if err != nil {
+		return TestResult{
+			TestName: testName,
+			Success:  false,
+			Message:  fmt.Sprintf("获取锁失败: %v", err),
+		}
+	}
+
+	fmt.Printf("[超时] ✓ 获取锁成功\n")
+
+	// 模拟工作，测试锁的超时行为
+	workSteps := 8
+	completedSteps := 0
+
+	for i := 0; i < workSteps; i++ {
 		select {
 		case <-ctx.Done():
-			return
+			goto timeoutWorkDone
 		default:
 		}
 
-		lock := client.NewDistributedLock(lockKey, nodeID,
-			deimos.WithTTL(5*time.Second),
-			deimos.WithAutoRenewal(false))
+		fmt.Printf("[超时] 工作进度: %d/%d\n", i+1, workSteps)
+		time.Sleep(1 * time.Second)
+		completedSteps++
 
-		fmt.Printf("[超时] 尝试获取锁（使用 watchAndLock 机制）\n")
-
-		// Lock 方法内部已经使用了 watchAndLock，无需手动重试
-		err := lock.Lock(ctx)
-		if err != nil {
-			log.Printf("[超时] 获取锁失败: %v", err)
-			time.Sleep(5 * time.Second)
-			continue
+		// 检查锁是否还有效
+		if !lock.IsHeld() {
+			fmt.Printf("[超时] 锁已超时失效\n")
+			break
 		}
+	}
 
-		fmt.Printf("[超时] ✓ 获取锁成功\n")
-
-		// 模拟工作，但可能超时
-		workCtx, workCancel := context.WithTimeout(ctx, 8*time.Second)
-
-		func() {
-			defer workCancel()
-
-			for i := 0; i < 10; i++ {
-				select {
-				case <-workCtx.Done():
-					fmt.Printf("[超时] 工作被取消: %v\n", workCtx.Err())
-					return
-				default:
-				}
-
-				fmt.Printf("[超时] 工作进度: %d/10\n", i+1)
-				time.Sleep(1 * time.Second)
+timeoutWorkDone:
+	// 释放锁 - 如果锁已经过期，忽略 "Key not found" 错误
+	unlockErr := lock.Unlock(ctx)
+	if unlockErr != nil {
+		// 检查是否是锁已过期的错误
+		if !isKeyNotFoundError(unlockErr) {
+			return TestResult{
+				TestName: testName,
+				Success:  false,
+				Message:  fmt.Sprintf("释放锁失败: %v", unlockErr),
 			}
-			fmt.Printf("[超时] 工作完成\n")
-		}()
-
-		// 释放锁
-		if err := lock.Unlock(ctx); err != nil {
-			log.Printf("[超时] 释放锁失败: %v", err)
 		} else {
-			fmt.Printf("[超时] ✓ 锁已释放\n")
+			fmt.Printf("[超时] 锁已自动过期，无需手动释放\n")
 		}
+	}
 
-		time.Sleep(3 * time.Second)
+	fmt.Printf("[超时] ✓ 锁已释放\n")
+
+	// 评估测试结果
+	success := completedSteps >= 3 // 至少完成3步工作
+	message := fmt.Sprintf("完成 %d/%d 工作步骤", completedSteps, workSteps)
+
+	return TestResult{
+		TestName: testName,
+		Success:  success,
+		Message:  message,
 	}
 }
 
 // 多个锁的协调示例
-func multipleLockExample(ctx context.Context, client *deimos.Client) {
+func multipleLockExample(ctx context.Context, client *deimos.Client) TestResult {
+	testName := "多个锁的协调"
 	time.Sleep(4 * time.Second) // 错开启动时间
+
+	fmt.Printf("[多锁] 开始测试: %s\n", testName)
 
 	nodeID := "multi-lock-node"
 	lockKeys := []string{
@@ -213,68 +273,108 @@ func multipleLockExample(ctx context.Context, client *deimos.Client) {
 		"/locks/resource-c",
 	}
 
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		default:
+	fmt.Printf("[多锁] 尝试获取多个锁\n")
+
+	// 创建多个锁
+	locks := make([]*deimos.DistributedLock, len(lockKeys))
+	for i, key := range lockKeys {
+		locks[i] = client.NewDistributedLock(key, nodeID,
+			deimos.WithTTL(15*time.Second),
+			deimos.WithAutoRenewal(false))
+	}
+
+	// 尝试按顺序获取所有锁
+	acquiredLocks := make([]*deimos.DistributedLock, 0, len(locks))
+	allLocksAcquired := true
+
+	for i, lock := range locks {
+		fmt.Printf("[多锁] 获取锁 %d/%d: %s\n", i+1, len(locks), lockKeys[i])
+
+		if err := lock.TryLock(ctx); err != nil {
+			fmt.Printf("[多锁] 获取锁失败: %v\n", err)
+			allLocksAcquired = false
+			break
 		}
 
-		fmt.Printf("[多锁] 尝试获取多个锁\n")
+		acquiredLocks = append(acquiredLocks, lock)
+		fmt.Printf("[多锁] ✓ 锁 %d 获取成功\n", i+1)
+	}
 
-		// 创建多个锁
-		locks := make([]*deimos.DistributedLock, len(lockKeys))
-		for i, key := range lockKeys {
-			locks[i] = client.NewDistributedLock(key, nodeID,
-				deimos.WithTTL(15*time.Second),
-				deimos.WithAutoRenewal(false))
-		}
+	var workCompleted bool
+	if allLocksAcquired {
+		fmt.Printf("[多锁] ✓ 所有锁获取成功，开始协调工作\n")
 
-		// 尝试按顺序获取所有锁
-		acquiredLocks := make([]*deimos.DistributedLock, 0, len(locks))
-		success := true
-
-		for i, lock := range locks {
-			fmt.Printf("[多锁] 获取锁 %d/%d: %s\n", i+1, len(locks), lockKeys[i])
-
-			if err := lock.TryLock(ctx); err != nil {
-				fmt.Printf("[多锁] 获取锁失败: %v\n", err)
-				success = false
-				break
+		// 执行需要多个资源的工作
+		workSteps := 5
+		for i := 0; i < workSteps; i++ {
+			select {
+			case <-ctx.Done():
+				goto multiLockWorkDone
+			default:
 			}
 
-			acquiredLocks = append(acquiredLocks, lock)
-			fmt.Printf("[多锁] ✓ 锁 %d 获取成功\n", i+1)
+			fmt.Printf("[多锁] 协调工作进度: %d/%d\n", i+1, workSteps)
+			time.Sleep(1 * time.Second)
+
+			if i == workSteps-1 {
+				workCompleted = true
+			}
 		}
 
-		if success {
-			fmt.Printf("[多锁] ✓ 所有锁获取成功，开始协调工作\n")
-
-			// 执行需要多个资源的工作
-			for i := 0; i < 5; i++ {
-				fmt.Printf("[多锁] 协调工作进度: %d/5\n", i+1)
-				time.Sleep(2 * time.Second)
-			}
-
+		if workCompleted {
 			fmt.Printf("[多锁] 协调工作完成\n")
 		}
-
-		// 释放所有已获取的锁（按相反顺序）
-		var wg sync.WaitGroup
-		for i := len(acquiredLocks) - 1; i >= 0; i-- {
-			wg.Add(1)
-			go func(lock *deimos.DistributedLock, index int) {
-				defer wg.Done()
-				if err := lock.Unlock(ctx); err != nil {
-					log.Printf("[多锁] 释放锁 %d 失败: %v", index, err)
-				} else {
-					fmt.Printf("[多锁] ✓ 锁 %d 已释放\n", index+1)
-				}
-			}(acquiredLocks[i], i)
-		}
-		wg.Wait()
-
-		fmt.Printf("[多锁] 所有锁已释放\n")
-		time.Sleep(10 * time.Second)
 	}
+
+multiLockWorkDone:
+	// 释放所有已获取的锁（按相反顺序）
+	var wg sync.WaitGroup
+	unlockErrors := 0
+	for i := len(acquiredLocks) - 1; i >= 0; i-- {
+		wg.Add(1)
+		go func(lock *deimos.DistributedLock, index int) {
+			defer wg.Done()
+			if err := lock.Unlock(ctx); err != nil {
+				if !isKeyNotFoundError(err) {
+					log.Printf("[多锁] 释放锁 %d 失败: %v", index, err)
+					unlockErrors++
+				} else {
+					fmt.Printf("[多锁] 锁 %d 已自动过期\n", index+1)
+				}
+			} else {
+				fmt.Printf("[多锁] ✓ 锁 %d 已释放\n", index+1)
+			}
+		}(acquiredLocks[i], i)
+	}
+	wg.Wait()
+
+	fmt.Printf("[多锁] 所有锁已释放\n")
+
+	// 评估测试结果
+	success := allLocksAcquired && workCompleted && unlockErrors == 0
+	var message string
+	if !allLocksAcquired {
+		message = fmt.Sprintf("获取了 %d/%d 个锁", len(acquiredLocks), len(lockKeys))
+	} else if !workCompleted {
+		message = "获取了所有锁但工作未完成"
+	} else if unlockErrors > 0 {
+		message = fmt.Sprintf("工作完成但有 %d 个锁释放失败", unlockErrors)
+	} else {
+		message = "成功获取所有锁、完成工作并释放锁"
+	}
+
+	return TestResult{
+		TestName: testName,
+		Success:  success,
+		Message:  message,
+	}
+}
+
+// 检查错误是否是 "Key not found" 类型的错误
+func isKeyNotFoundError(err error) bool {
+	if err == nil {
+		return false
+	}
+	errStr := err.Error()
+	return strings.Contains(errStr, "Key not found") || strings.Contains(errStr, "HTTP 404")
 }
